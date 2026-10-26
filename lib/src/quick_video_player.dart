@@ -50,6 +50,7 @@ class QuickVideoPlayer extends StatefulWidget {
     this.backgroundColor = Colors.black,
     this.thumbnailUrl,
     this.overlay,
+    this.sharedMuted,
     this.loadingIndicator,
     this.errorIndicator,
     this.controlsToShow = const [VideoPlayerControls.playPause],
@@ -115,6 +116,9 @@ class QuickVideoPlayer extends StatefulWidget {
 
   final Widget? overlay;
 
+  /// Shared across a feed so muting one reel mutes the next one too.
+  final ValueNotifier<bool>? sharedMuted;
+
   final Widget? loadingIndicator;
 
   final Widget? errorIndicator;
@@ -170,15 +174,25 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
   final Set<int> _loggedMilestones = {};
   bool _has30SecondMilestone = false;
   bool _hasCompleted = false;
+  late final ValueNotifier<bool> _muted;
+  late final bool _ownsMuted;
 
   @override
   void initState() {
     super.initState();
+    _muted = widget.sharedMuted ?? ValueNotifier(false);
+    _ownsMuted = widget.sharedMuted == null;
+    _muted.addListener(_onMuted);
     _uniqueKey =
         'video_${DateTime.now().millisecondsSinceEpoch}_${widget.videoUrl.hashCode}';
     _videoListener = _getVideoListener;
     _initializeVideo();
     _initializePlayPauseAnimation();
+  }
+
+  void _onMuted() {
+    _controller?.setVolume(_muted.value ? 0 : 1);
+    if (mounted) setState(() {});
   }
 
   void _initializeVideo() async {
@@ -228,6 +242,7 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
         ..setLooping(widget.looping)
         ..addListener(_videoListener!);
       await _controller?.initialize();
+      await _controller?.setVolume(_muted.value ? 0 : 1);
       setState(() {
         _isInitialized = true;
         _hasError = false;
@@ -472,6 +487,8 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     WakelockPlus.disable();
+    _muted.removeListener(_onMuted);
+    if (_ownsMuted) _muted.dispose();
     if (_videoListener != null) {
       _controller?.removeListener(_videoListener!);
     }
@@ -509,8 +526,9 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
                             ),
                             if (widget.overlay != null)
                               Positioned.fill(
-                                child: IgnorePointer(
-                                  ignoring: false,
+                                child: QuickPlayerScope(
+                                  muted: _muted,
+                                  isMuted: _muted.value,
                                   child: widget.overlay!,
                                 ),
                               ),
@@ -906,4 +924,28 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
       ),
     );
   }
+}
+
+/// Mute state for an overlay drawn on top of [QuickVideoPlayer].
+class QuickPlayerScope extends InheritedWidget {
+  const QuickPlayerScope({
+    required this.muted,
+    required this.isMuted,
+    required super.child,
+  });
+
+  final ValueNotifier<bool> muted;
+  final bool isMuted;
+
+  static QuickPlayerScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<QuickPlayerScope>();
+  }
+
+  void toggleMute() {
+    muted.value = !muted.value;
+  }
+
+  @override
+  bool updateShouldNotify(QuickPlayerScope oldWidget) =>
+      isMuted != oldWidget.isMuted;
 }

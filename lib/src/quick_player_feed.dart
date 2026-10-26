@@ -18,6 +18,7 @@ class QuickPlayerFeed<T> extends StatefulWidget {
     this.autoPlayNext = false,
     this.edgeOffset = 0,
     this.overlayBuilder,
+    this.expandOverlay = false,
     this.noMoreItemsIndicator,
     this.firstPageLoadingIndicator,
     this.itemLoadingIndicator,
@@ -79,6 +80,9 @@ class QuickPlayerFeed<T> extends StatefulWidget {
 
   final Widget Function(BuildContext, T, int)? overlayBuilder;
 
+  /// Lets the overlay cover the whole frame, including top controls.
+  final bool expandOverlay;
+
   final double? bottomPadding;
 
   /// Builder function to extract video ID from item for analytics
@@ -108,6 +112,14 @@ class QuickPlayerFeed<T> extends StatefulWidget {
 
 class _QuickPlayerFeedState<T> extends State<QuickPlayerFeed<T>> {
   final PageController _pageController = PageController(keepPage: true);
+  final ValueNotifier<bool> _sharedMuted = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _sharedMuted.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +201,7 @@ class _QuickPlayerFeedState<T> extends State<QuickPlayerFeed<T>> {
       clickAction: ClickAction.playPause,
       showControlsAlways: true,
       videoUrl: widget.videoUrlBuilder(item),
+      sharedMuted: _sharedMuted,
       videoId: widget.videoIdBuilder?.call(item),
       videoTitle: widget.videoTitleBuilder?.call(item),
       videoCategory: widget.videoCategory,
@@ -237,6 +250,11 @@ class _QuickPlayerFeedState<T> extends State<QuickPlayerFeed<T>> {
 
   Widget _buildOverlay(BuildContext context, T item, int index) {
     if (widget.overlayBuilder == null) return SizedBox.shrink();
+    if (widget.expandOverlay) {
+      return SizedBox.expand(
+        child: widget.overlayBuilder?.call(context, item, index),
+      );
+    }
 
     final progressBarPadding = widget.showProgress ? 80.0 : 0.0;
 
