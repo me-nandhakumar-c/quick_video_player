@@ -160,6 +160,7 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
   bool _isPlaying = false;
   bool _isBuffering = false;
   bool _hasError = false;
+  bool _missingVideo = false;
   String? _errorMessage;
   bool _showControls = false;
   bool _hasPlayedOnce = false;
@@ -197,7 +198,11 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
 
   void _initializeVideo() async {
     final trimmedUrl = widget.videoUrl.trim();
-    if (trimmedUrl.isEmpty || !trimmedUrl.startsWith('http')) {
+    if (trimmedUrl.isEmpty) {
+      setState(() => _missingVideo = true);
+      return;
+    }
+    if (!trimmedUrl.startsWith('http')) {
       setState(() {
         _hasError = true;
       });
@@ -506,41 +511,61 @@ class _QuickVideoPlayerState extends State<QuickVideoPlayer>
       onVisibilityChanged: _onVisibilityChanged,
       child: Container(
         color: widget.backgroundColor,
-        child: _hasError
-            ? _getErrorWidget
-            : !_isInitialized
-                ? _getLoadingWidget
-                : GestureDetector(
-                    onTap: _onVideoTap,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Center(
-                              child: AspectRatio(
-                                aspectRatio: widget.aspectRatio ??
-                                    _controller!.value.aspectRatio,
-                                child: VideoPlayer(_controller!),
-                              ),
-                            ),
-                            if (widget.overlay != null)
-                              Positioned.fill(
-                                child: QuickPlayerScope(
-                                  muted: _muted,
-                                  isMuted: _muted.value,
-                                  child: widget.overlay!,
+        child: _missingVideo
+            ? _withOverlay(const SizedBox.expand())
+            : _hasError
+                ? _getErrorWidget
+                : !_isInitialized
+                    ? _getLoadingWidget
+                    : GestureDetector(
+                        onTap: _onVideoTap,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Center(
+                                  child: AspectRatio(
+                                    aspectRatio: widget.aspectRatio ??
+                                        _controller!.value.aspectRatio,
+                                    child: VideoPlayer(_controller!),
+                                  ),
                                 ),
-                              ),
-                            _buildPlayPauseAnimation(),
-                            if (_showControls) ..._controlsOverlay(),
-                            if (widget.showProgress) _buildProgressBar(),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
+                                if (widget.overlay != null)
+                                  Positioned.fill(
+                                    child: QuickPlayerScope(
+                                      muted: _muted,
+                                      isMuted: _muted.value,
+                                      child: widget.overlay!,
+                                    ),
+                                  ),
+                                _buildPlayPauseAnimation(),
+                                if (_showControls) ..._controlsOverlay(),
+                                if (widget.showProgress) _buildProgressBar(),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
       ),
+    );
+  }
+
+  Widget _withOverlay(Widget child) {
+    final overlay = widget.overlay;
+    if (overlay == null) return child;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        Positioned.fill(
+          child: QuickPlayerScope(
+            muted: _muted,
+            isMuted: _muted.value,
+            child: overlay,
+          ),
+        ),
+      ],
     );
   }
 
